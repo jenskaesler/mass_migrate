@@ -27,6 +27,7 @@
 - 🔎 **Automatische Encoding-Erkennung** je Datei (UTF-8 mit/ohne BOM, UTF-16 LE/BE, Windows-1252-Fallback) – keine zerschossenen Umlaute mehr
 - 🛡️ **Binärdatei-Schutz**: Dateien mit rohen NUL-Bytes (z. B. undokumentierte proprietäre Formate) werden automatisch erkannt und **nicht** angefasst
 - 🧬 **Natives massCode-Importformat**: erzeugt direkt eine "VS Code Snippets JSON", die massCode nativ versteht
+- 🔂 Auch beim JSON-Export wird bei einer bereits bestehenden Datei nachgefragt (Überschreiben/Abbrechen, steuerbar über `-IfJsonExists`)
 - 🏷️ **Tagging** aller erfolgreich migrierten Dateien im Dateinamen (`_massmigrated`)
 - 📦 **ZIP-Backup** mit exakt erhaltener Ordnerstruktur – nur die migrierten Dateien
 - 🔁 **Schlauer Umgang mit bestehenden Backups**: existiert unter `-ZipPath` bereits ein Archiv, fragt das Skript nach (Überschreiben / Erweitern / Abbrechen) – auch nicht-interaktiv steuerbar über `-IfZipExists`
