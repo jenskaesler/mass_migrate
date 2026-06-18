@@ -7,6 +7,17 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.1] – 2026-06-18
+
+### 🐛 Behoben
+- 🚨 **Bug**: Existierte unter `-ZipPath` bereits ein Archiv, wurde es bisher stillschweigend gelöscht und neu angelegt. Jetzt fragt das Skript interaktiv nach: **Überschreiben**, **Erweitern** oder **Abbrechen**
+- 🔁 Neuer Parameter `-IfZipExists` (`Ask` / `Overwrite` / `Extend`) für nicht-interaktive Steuerung in automatisierten Läufen
+- ➕ Im Erweitern-Modus werden vorhandene Einträge mit gleichem relativem Pfad aktualisiert statt dupliziert; alle übrigen Einträge des bestehenden Archivs bleiben unangetastet
+- 🛡️ ZIP-Verifikation korrigiert: prüft jetzt, ob jede migrierte Datei im Archiv vorhanden ist, statt nur die Gesamtanzahl der Einträge zu vergleichen (Letzteres wäre beim Erweitern eines bereits gefüllten Archivs immer fehlgeschlagen)
+- ↩️ Beim Abbrechen wird das zuvor gesetzte `_massmigrated`-Tagging automatisch zurückgenommen, sodass der Quellordner wirklich unverändert bleibt
+
+---
+
 ## [1.1.0] – 2026-06-18
 
 ### ✨ Hinzugefügt
