@@ -1,29 +1,35 @@
 <#
 .SYNOPSIS
+    🚀 MassMigrate - migriert bestehende Skript-Sammlungen sicher nach massCode.
+
+.DESCRIPTION
     Liest Skript-Dateien aus einem Ordner (rekursiv), erzeugt eine
     VS-Code-Snippets-JSON-Datei fuer massCode, taggt die erfolgreich
     gelesenen Dateien im Dateinamen, packt sie unter Beibehaltung der
     Ordnerstruktur in ein ZIP-Archiv und entfernt sie anschliessend aus
     dem Quellordner (inkl. dadurch leer gewordener Unterordner).
 
-.DESCRIPTION
     Ablauf:
-      1. Dateien im Quellordner (rekursiv, passende Extensions) einlesen.
-         Encoding wird je Datei automatisch erkannt (UTF-8/UTF-16 per BOM,
-         sonst UTF-8 oder Windows-1252-Fallback). Dateien mit rohen
-         NUL-Bytes gelten als "vermutlich Binaerdatei" und werden NICHT
-         angefasst (kein Tag, kein ZIP-Eintrag, bleiben unveraendert liegen).
-      2. VS-Code-Snippets-JSON fuer massCode schreiben.
-      3. Alle erfolgreich gelesenen Dateien im Dateinamen mit
-         "_massmigrated" taggen (vor der Dateiendung).
-      4. ZIP-Archiv erstellen, das exakt die Ordnerstruktur des
-         Quellordners abbildet, aber NUR die getaggten Dateien enthaelt.
-      5. ZIP verifizieren (Anzahl Eintraege vs. Anzahl migrierter Dateien).
-         Nur bei Erfolg geht es weiter.
-      6. Nach Bestaetigung (oder mit -Force): die getaggten Dateien aus dem
-         Quellordner loeschen, danach alle dadurch leer gewordenen Ordner
-         entfernen. Alles, was NICHT migriert werden konnte, bleibt liegen
-         und zeigt damit auf einen Blick, was noch haendisch zu pruefen ist.
+      1. 📖  Dateien im Quellordner (rekursiv, passende Extensions) einlesen.
+            Encoding wird je Datei automatisch erkannt (UTF-8/UTF-16 per BOM,
+            sonst UTF-8 oder Windows-1252-Fallback). Dateien mit rohen
+            NUL-Bytes gelten als "vermutlich Binaerdatei" und werden NICHT
+            angefasst (kein Tag, kein ZIP-Eintrag, bleiben unveraendert liegen).
+      2. 🧬  VS-Code-Snippets-JSON fuer massCode schreiben.
+      3. 🏷️  Alle erfolgreich gelesenen Dateien im Dateinamen mit
+            "_massmigrated" taggen (vor der Dateiendung).
+      4. 📦  ZIP-Archiv erstellen, das exakt die Ordnerstruktur des
+            Quellordners abbildet, aber NUR die getaggten Dateien enthaelt.
+      5. ✅  ZIP verifizieren (Anzahl Eintraege vs. Anzahl migrierter Dateien).
+            Nur bei Erfolg geht es weiter.
+      6. 🧹  Nach Bestaetigung die getaggten Dateien aus dem Quellordner
+            loeschen, danach alle dadurch leer gewordenen Ordner entfernen.
+            Alles, was NICHT migriert werden konnte, bleibt liegen und zeigt
+            damit auf einen Blick, was noch haendisch zu pruefen ist.
+
+    Dieser letzte, destruktive Schritt unterstuetzt die nativen PowerShell-
+    Mechanismen -WhatIf (Vorschau ohne Aenderungen) und -Confirm
+    (Rueckfrage erzwingen bzw. mit -Confirm:$false unterdruecken).
 
     Wichtig: Das VS-Code-Snippet-Format verwendet "$" fuer Tabstops/Variablen
     (z.B. $1, ${1:name}). Da PowerShell-Skripte voller "$"-Variablen sind,
@@ -43,14 +49,23 @@
 .PARAMETER Extensions
     Dateiendungen, die beruecksichtigt werden sollen.
 
-.PARAMETER Force
-    Ueberspringt die Bestaetigungsabfrage vor dem Loeschen (fuer automatisierte Laeufe).
-
 .EXAMPLE
     .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip"
+
+.EXAMPLE
+    # Vorschau ohne jegliche Aenderung am Quellordner (Tagging/ZIP finden trotzdem statt,
+    # nur der finale Loeschschritt wird simuliert):
+    .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -WhatIf
+
+.EXAMPLE
+    # Fuer automatisierte Laeufe ohne Rueckfrage:
+    .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -Confirm:$false
+
+.LINK
+    https://github.com/<dein-user>/MassMigrate
 #>
 
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourceFolder,
@@ -76,10 +91,21 @@ param(
         '.vbs', '.vba',
         '.reg',
         '.bds'
-    ),
-
-    [switch]$Force
+    )
 )
+
+#region Helpers
+
+function Write-Section {
+    param(
+        [string]$Icon,
+        [string]$Text,
+        [string]$Color = 'Cyan'
+    )
+    Write-Host ""
+    Write-Host "$Icon  $Text" -ForegroundColor $Color
+    Write-Host ('-' * ($Text.Length + 4)) -ForegroundColor DarkGray
+}
 
 # Mapping Dateiendung -> VS Code Language-ID (steuert die Syntax-Hervorhebung in massCode)
 $ExtensionToScope = @{
@@ -103,7 +129,8 @@ $ExtensionToScope = @{
     '.vbs'  = 'vbscript'
     '.vba'  = 'vb'
     '.reg'  = 'reg'
-    # '.bds' bewusst ohne Mapping - Format unklar, landet als Plain Text
+    # '.bds' bewusst ohne Mapping - Format unklar (proprietaeres baramundi
+    # Deployment Script), landet als Plain Text in massCode.
 }
 
 # Liest eine Datei robust ein: erkennt BOM (UTF-8/UTF-16) automatisch.
@@ -165,6 +192,16 @@ function Get-SmartFileLines {
     }
 }
 
+#endregion Helpers
+
+#region Banner
+
+Write-Host ""
+Write-Host "  🚀  MassMigrate" -ForegroundColor Magenta
+Write-Host "      Skripte ab in die massCode-Zukunft." -ForegroundColor DarkGray
+
+#endregion Banner
+
 if (-not (Test-Path -LiteralPath $SourceFolder)) {
     throw "Ordner nicht gefunden: $SourceFolder"
 }
@@ -184,10 +221,15 @@ $encodingLog    = New-Object System.Collections.Generic.List[object]
 $binarySuspects = New-Object System.Collections.Generic.List[object]
 $migratedFiles  = New-Object System.Collections.Generic.List[object]
 
-# ---------------------------------------------------------------------
-# Phase 1: Einlesen + JSON-Snippets aufbauen
-# ---------------------------------------------------------------------
+#region Phase 1: Einlesen + JSON-Snippets aufbauen
+
+Write-Section -Icon '📖' -Text 'Lese Skripte ein & baue massCode-Snippets'
+
+$fileIndex = 0
 foreach ($file in $files) {
+    $fileIndex++
+    Write-Progress -Activity 'Lese Skripte ein' -Status $file.Name -PercentComplete (($fileIndex / $files.Count) * 100)
+
     $relativePath = $file.FullName.Substring($SourceFolder.Length).TrimStart('\', '/')
     $relativePath = $relativePath -replace '\\', '/'
 
@@ -237,13 +279,14 @@ foreach ($file in $files) {
         Extension        = $file.Extension
     })
 }
+Write-Progress -Activity 'Lese Skripte ein' -Completed
 
 $json = $snippets | ConvertTo-Json -Depth 6
 
 # Ohne BOM speichern
 [System.IO.File]::WriteAllText($OutputFile, $json, (New-Object System.Text.UTF8Encoding($false)))
 
-Write-Host "Fertig: $counter Skripte exportiert nach $OutputFile" -ForegroundColor Green
+Write-Host "✅ $counter Skripte exportiert nach $OutputFile" -ForegroundColor Green
 Write-Host ""
 Write-Host "Erkannte Encodings (zur Kontrolle):" -ForegroundColor Cyan
 $encodingLog | Group-Object Encoding | Sort-Object Count -Descending |
@@ -252,16 +295,16 @@ $encodingLog | Group-Object Encoding | Sort-Object Count -Descending |
 $fallbackFiles = $encodingLog | Where-Object { $_.Encoding -eq 'Windows-1252 / ANSI (Fallback)' }
 if ($fallbackFiles.Count -gt 0) {
     Write-Host ""
-    Write-Host "Diese Dateien wurden per ANSI-Fallback gelesen - bitte nach dem Import" -ForegroundColor Yellow
-    Write-Host "stichprobenartig auf korrekte Umlaute/Sonderzeichen pruefen:" -ForegroundColor Yellow
-    $fallbackFiles | ForEach-Object { Write-Host "  - $($_.Datei)" }
+    Write-Host "⚠️  Diese Dateien wurden per ANSI-Fallback gelesen - bitte nach dem Import" -ForegroundColor Yellow
+    Write-Host "   stichprobenartig auf korrekte Umlaute/Sonderzeichen pruefen:" -ForegroundColor Yellow
+    $fallbackFiles | ForEach-Object { Write-Host "   - $($_.Datei)" }
 }
 
 if ($binarySuspects.Count -gt 0) {
     Write-Host ""
-    Write-Host "Diese Dateien enthalten rohe NUL-Bytes und wurden NICHT exportiert," -ForegroundColor Red
-    Write-Host "und werden auch NICHT getaggt/gezippt/geloescht. Bitte manuell pruefen:" -ForegroundColor Red
-    $binarySuspects | ForEach-Object { Write-Host "  - $_" }
+    Write-Host "🚫 Diese Dateien enthalten rohe NUL-Bytes und wurden NICHT exportiert," -ForegroundColor Red
+    Write-Host "   und werden auch NICHT getaggt/gezippt/geloescht. Bitte manuell pruefen:" -ForegroundColor Red
+    $binarySuspects | ForEach-Object { Write-Host "   - $_" }
 }
 
 if ($migratedFiles.Count -eq 0) {
@@ -269,11 +312,11 @@ if ($migratedFiles.Count -eq 0) {
     return
 }
 
-# ---------------------------------------------------------------------
-# Phase 2: Migrierte Dateien im Namen taggen ("_massmigrated")
-# ---------------------------------------------------------------------
-Write-Host ""
-Write-Host "Tagge $($migratedFiles.Count) migrierte Datei(en) mit '_massmigrated'..." -ForegroundColor Cyan
+#endregion Phase 1
+
+#region Phase 2: Migrierte Dateien im Namen taggen ("_massmigrated")
+
+Write-Section -Icon '🏷️' -Text "Tagge $($migratedFiles.Count) migrierte Datei(en)"
 
 foreach ($item in $migratedFiles) {
     $directory = Split-Path -Path $item.OriginalFullName -Parent
@@ -284,7 +327,7 @@ foreach ($item in $migratedFiles) {
     }
     else {
         $newLeaf     = "$($item.BaseName)_massmigrated$($item.Extension)"
-        Rename-Item -LiteralPath $item.OriginalFullName -NewName $newLeaf
+        Rename-Item -LiteralPath $item.OriginalFullName -NewName $newLeaf -WhatIf:$false -Confirm:$false
         $newFullName = Join-Path -Path $directory -ChildPath $newLeaf
     }
 
@@ -294,19 +337,21 @@ foreach ($item in $migratedFiles) {
     $item | Add-Member -NotePropertyName NewRelativePath -NotePropertyValue $newRelativePath
 }
 
-# ---------------------------------------------------------------------
-# Phase 3: ZIP-Archiv erstellen (nur getaggte Dateien, Ordnerstruktur erhalten)
-# ---------------------------------------------------------------------
-Write-Host ""
-Write-Host "Erstelle ZIP-Archiv: $ZipPath" -ForegroundColor Cyan
+Write-Host "✅ Tagging abgeschlossen." -ForegroundColor Green
+
+#endregion Phase 2
+
+#region Phase 3: ZIP-Archiv erstellen (nur getaggte Dateien, Ordnerstruktur erhalten)
+
+Write-Section -Icon '📦' -Text "Packe ZIP-Archiv: $ZipPath"
 
 if (Test-Path -LiteralPath $ZipPath) {
-    Remove-Item -LiteralPath $ZipPath -Force
+    Remove-Item -LiteralPath $ZipPath -Force -WhatIf:$false -Confirm:$false
 }
 
 $zipDir = Split-Path -Path $ZipPath -Parent
 if ($zipDir -and -not (Test-Path -LiteralPath $zipDir)) {
-    New-Item -ItemType Directory -Path $zipDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $zipDir -Force -WhatIf:$false -Confirm:$false | Out-Null
 }
 
 Add-Type -AssemblyName System.IO.Compression
@@ -336,9 +381,14 @@ finally {
     $zipStream.Dispose()
 }
 
-# ---------------------------------------------------------------------
-# Phase 4: ZIP verifizieren - erst bei Erfolg geht es weiter
-# ---------------------------------------------------------------------
+Write-Host "✅ ZIP erstellt." -ForegroundColor Green
+
+#endregion Phase 3
+
+#region Phase 4: ZIP verifizieren - erst bei Erfolg geht es weiter
+
+Write-Section -Icon '✅' -Text 'Verifiziere ZIP-Archiv'
+
 $verifyArchive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
 $entryCount    = $verifyArchive.Entries.Count
 $verifyArchive.Dispose()
@@ -347,24 +397,22 @@ if ($entryCount -ne $migratedFiles.Count) {
     throw "ZIP-Verifikation fehlgeschlagen: Erwartet $($migratedFiles.Count) Datei(en), im Archiv gefunden: $entryCount. Abbruch - es wird NICHTS geloescht."
 }
 
-Write-Host "ZIP verifiziert: $entryCount Datei(en) korrekt enthalten." -ForegroundColor Green
+Write-Host "✅ $entryCount Datei(en) korrekt im Archiv enthalten." -ForegroundColor Green
 
-# ---------------------------------------------------------------------
-# Phase 5: Bestaetigung + Loeschen der migrierten Dateien + leere Ordner entfernen
-# ---------------------------------------------------------------------
-Write-Host ""
-$doCleanup = [bool]$Force
+#endregion Phase 4
 
-if (-not $doCleanup) {
-    $answer    = Read-Host "Jetzt $($migratedFiles.Count) migrierte Datei(en) aus '$SourceFolder' loeschen? (j/N)"
-    $doCleanup = ($answer -eq 'j' -or $answer -eq 'J' -or $answer -eq 'y' -or $answer -eq 'Y')
-}
+#region Phase 5: Bestaetigung + Loeschen + leere Ordner entfernen
 
-if ($doCleanup) {
+Write-Section -Icon '🧹' -Text 'Aufraeumen im Quellordner'
+
+$target = "$($migratedFiles.Count) migrierte Datei(en) in '$SourceFolder'"
+$action = 'Aus dem Quellordner entfernen (ZIP ist verifiziert vorhanden)'
+
+if ($PSCmdlet.ShouldProcess($target, $action)) {
     foreach ($item in $migratedFiles) {
-        Remove-Item -LiteralPath $item.NewFullName -Force
+        Remove-Item -LiteralPath $item.NewFullName -Force -Confirm:$false
     }
-    Write-Host "$($migratedFiles.Count) migrierte Datei(en) aus dem Quellordner entfernt." -ForegroundColor Green
+    Write-Host "✅ $($migratedFiles.Count) migrierte Datei(en) entfernt." -ForegroundColor Green
 
     # Leere Ordner entfernen - tiefste Pfade zuerst, damit Kaskaden
     # (Ordner wird durch Entfernen seiner Unterordner selbst leer) korrekt greifen
@@ -373,25 +421,31 @@ if ($doCleanup) {
         Sort-Object { $_.FullName.Length } -Descending |
         ForEach-Object {
             if ((Get-ChildItem -LiteralPath $_.FullName -Force | Measure-Object).Count -eq 0) {
-                Remove-Item -LiteralPath $_.FullName -Force
+                Remove-Item -LiteralPath $_.FullName -Force -Confirm:$false
                 $removedDirs++
             }
         }
-    Write-Host "$removedDirs leere(r) Ordner entfernt." -ForegroundColor Green
+    Write-Host "✅ $removedDirs leere(r) Ordner entfernt." -ForegroundColor Green
 
     $remaining = Get-ChildItem -LiteralPath $SourceFolder -Recurse -File -ErrorAction SilentlyContinue
     Write-Host ""
     if ($remaining.Count -gt 0) {
-        Write-Host "Verbleibend im Quellordner (= haendisch pruefen):" -ForegroundColor Yellow
+        Write-Host "👀 Verbleibend im Quellordner (= haendisch pruefen):" -ForegroundColor Yellow
         $remaining | ForEach-Object {
-            Write-Host "  - $($_.FullName.Substring($SourceFolder.Length).TrimStart('\','/'))"
+            Write-Host "   - $($_.FullName.Substring($SourceFolder.Length).TrimStart('\','/'))"
         }
     }
     else {
-        Write-Host "Quellordner ist jetzt leer - alles wurde migriert." -ForegroundColor Green
+        Write-Host "🎉 Quellordner ist jetzt leer - alles wurde migriert." -ForegroundColor Green
     }
 }
 else {
-    Write-Host "Loeschen uebersprungen (keine Bestaetigung). Migrierte Dateien liegen weiterhin" -ForegroundColor Yellow
-    Write-Host "mit '_massmigrated' im Namen im Quellordner, das ZIP wurde trotzdem erstellt." -ForegroundColor Yellow
+    Write-Host "ℹ️  Loeschen uebersprungen (WhatIf bzw. nicht bestaetigt)." -ForegroundColor Yellow
+    Write-Host "   Migrierte Dateien liegen weiterhin mit '_massmigrated' im Namen im" -ForegroundColor Yellow
+    Write-Host "   Quellordner, das ZIP wurde trotzdem erstellt." -ForegroundColor Yellow
 }
+
+#endregion Phase 5
+
+Write-Host ""
+Write-Host "🏁 Fertig!" -ForegroundColor Magenta
