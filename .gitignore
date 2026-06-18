@@ -1,0 +1,15 @@
+# 🧬 Generierte Outputs - nicht ins Repo committen
+*.massmigrated.*
+masscode-import*.json
+*_backup.zip
+*-backup.zip
+*.log
+
+# 🖥️ Editor / IDE
+.vscode/
+.idea/
+
+# 🪟 Windows / macOS
+Thumbs.db
+desktop.ini
+.DS_Store
