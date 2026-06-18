@@ -121,6 +121,18 @@ Und die Endung zur `-Extensions`-Liste hinzufügen (oder beim Aufruf per Paramet
 
 ---
 
+## ⚠️ Wichtig für Mitwirkende: UTF-8-BOM nicht entfernen!
+
+`Export-ScriptsToMassCode.ps1` enthält Emojis und muss daher mit **UTF-8-BOM** gespeichert sein. Ohne BOM liest **Windows PowerShell 5.1** (`powershell.exe`, nicht zu verwechseln mit `pwsh.exe`/PowerShell 7) die Datei über die System-ANSI-Codepage statt UTF-8 – die Mehrbyte-Emojis zerfallen dabei in ungültige Zeichen und der Parser bricht ab ("Die Zeichenfolge hat kein Abschlusszeichen").
+
+Beim Bearbeiten bitte sicherstellen, dass dein Editor das BOM beibehält:
+
+- 🟦 **VS Code**: unten rechts in der Statusleiste auf die Kodierung klicken → **"UTF-8 with BOM"** wählen
+- 🟧 **Notepad++**: Menü **Kodierung** → **"UTF-8-BOM"**
+- ❌ Reines `UTF-8` (ohne BOM) oder ANSI/Windows-1252 führt zu genau diesem Bug
+
+---
+
 ## 🤝 Mitmachen
 
 Issues, Pull Requests und Erfahrungsberichte sind herzlich willkommen! Besonders spannend:

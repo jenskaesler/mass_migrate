@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     🚀 MassMigrate - migriert bestehende Skript-Sammlungen sicher nach massCode.
 
