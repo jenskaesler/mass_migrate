@@ -45,7 +45,10 @@ param(
         '.md',
         '.js', '.ts',
         '.html', '.css',
-        '.xml'
+        '.xml',
+        '.vbs', '.vba',
+        '.reg',
+        '.bds'
     )
 )
 
@@ -68,6 +71,10 @@ $ExtensionToScope = @{
     '.html' = 'html'
     '.css'  = 'css'
     '.xml'  = 'xml'
+    '.vbs'  = 'vbscript'
+    '.vba'  = 'vb'
+    '.reg'  = 'reg'
+    # '.bds' bewusst ohne Mapping - Format unklar, landet als Plain Text
 }
 
 # Liest eine Datei robust ein: erkennt BOM (UTF-8/UTF-16) automatisch.
