@@ -7,6 +7,15 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.2] – 2026-06-18
+
+### 🐛 Behoben
+- 🚨 **Bug**: Existierte unter `-OutputFile` bereits eine JSON-Datei, wurde sie bisher stillschweigend überschrieben. Jetzt fragt das Skript nach: **Überschreiben** oder **Abbrechen**
+- 🔂 Neuer Parameter `-IfJsonExists` (`Ask` / `Overwrite`) für nicht-interaktive Steuerung. Anders als beim ZIP gibt es hier bewusst kein "Erweitern" – zwei Snippet-Sammlungen lassen sich nicht sinnvoll automatisch zusammenführen
+- ⏱️ Die Abfrage erfolgt, bevor irgendetwas im Quellordner verändert wird (kein Tagging, kein ZIP) – ein Abbruch hinterlässt garantiert keine Spuren
+
+---
+
 ## [1.1.1] – 2026-06-18
 
 ### 🐛 Behoben
