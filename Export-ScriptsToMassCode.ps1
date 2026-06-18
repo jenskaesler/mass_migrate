@@ -42,6 +42,11 @@
 .PARAMETER OutputFile
     Pfad der JSON-Datei, die anschliessend in massCode importiert wird.
 
+.PARAMETER IfJsonExists
+    Verhalten, falls unter -OutputFile bereits eine Datei existiert:
+    'Ask' (Standard) fragt interaktiv nach (Ueberschreiben/Abbrechen),
+    'Overwrite' ersetzt die bestehende Datei ohne Rueckfrage.
+
 .PARAMETER ZipPath
     Pfad des ZIP-Archivs, das die migrierten Dateien (Ordnerstruktur erhalten)
     sichert, bevor sie aus dem Quellordner geloescht werden.
@@ -72,6 +77,10 @@
     # Wiederholter Lauf: bestehendes Backup-ZIP automatisch erweitern statt nachzufragen
     .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -IfZipExists Extend -Confirm:$false
 
+.EXAMPLE
+    # Komplett automatisiert: bestehende JSON und ZIP einfach ueberschreiben, keine Rueckfragen
+    .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -IfJsonExists Overwrite -IfZipExists Overwrite -Confirm:$false
+
 .LINK
     https://github.com/<dein-user>/MassMigrate
 #>
@@ -83,6 +92,9 @@ param(
 
     [Parameter(Mandatory = $true)]
     [string]$OutputFile,
+
+    [ValidateSet('Ask', 'Overwrite')]
+    [string]$IfJsonExists = 'Ask',
 
     [Parameter(Mandatory = $true)]
     [string]$ZipPath,
@@ -296,6 +308,33 @@ foreach ($file in $files) {
 Write-Progress -Activity 'Lese Skripte ein' -Completed
 
 $json = $snippets | ConvertTo-Json -Depth 6
+
+if (Test-Path -LiteralPath $OutputFile) {
+    $resolvedJsonAction = $IfJsonExists
+
+    if ($resolvedJsonAction -eq 'Ask') {
+        Write-Host "⚠️  Es existiert bereits eine JSON-Datei unter diesem Pfad:" -ForegroundColor Yellow
+        Write-Host "   $OutputFile" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   [U] Ueberschreiben - bestehende Datei wird ersetzt" -ForegroundColor Cyan
+        Write-Host "   [A] Abbrechen      - Skript wird beendet, nichts wird veraendert" -ForegroundColor Cyan
+        Write-Host ""
+
+        do {
+            $jsonChoice = Read-Host "Was moechtest du tun? (U/A)"
+        } while ($jsonChoice -notmatch '^[UuAa]$')
+
+        $resolvedJsonAction = switch -Regex ($jsonChoice) {
+            '^[Uu]$' { 'Overwrite' }
+            '^[Aa]$' { 'Abort' }
+        }
+    }
+
+    if ($resolvedJsonAction -eq 'Abort') {
+        Write-Host "↩️  Abgebrochen - es wurde noch nichts veraendert." -ForegroundColor Yellow
+        return
+    }
+}
 
 # Ohne BOM speichern
 [System.IO.File]::WriteAllText($OutputFile, $json, (New-Object System.Text.UTF8Encoding($false)))
