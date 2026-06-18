@@ -100,16 +100,33 @@ function Get-SmartFileLines {
         $encodingUsed = 'UTF-16 BE (BOM)'
     }
     else {
-        try {
-            # throwOnInvalidBytes = $true -> wirft Exception bei ungueltiger UTF-8-Sequenz
-            $strictUtf8   = New-Object System.Text.UTF8Encoding($false, $true)
-            $text         = $strictUtf8.GetString($bytes)
-            $encodingUsed = 'UTF-8 (ohne BOM)'
+        if ($bytes -contains [byte]0) {
+            # Rohes NUL-Byte ausserhalb eines erkannten BOM ist ein starkes
+            # Indiz dafuer, dass es sich NICHT um reinen Text handelt
+            # (z.B. proprietaere/strukturierte Formate wie .bds).
+            $text         = $null
+            $encodingUsed = 'Vermutlich Binaerdatei (NUL-Byte gefunden)'
         }
-        catch {
-            $ansi         = [System.Text.Encoding]::GetEncoding(1252)
-            $text         = $ansi.GetString($bytes)
-            $encodingUsed = 'Windows-1252 / ANSI (Fallback)'
+        else {
+            try {
+                # throwOnInvalidBytes = $true -> wirft Exception bei ungueltiger UTF-8-Sequenz
+                $strictUtf8   = New-Object System.Text.UTF8Encoding($false, $true)
+                $text         = $strictUtf8.GetString($bytes)
+                $encodingUsed = 'UTF-8 (ohne BOM)'
+            }
+            catch {
+                $ansi         = [System.Text.Encoding]::GetEncoding(1252)
+                $text         = $ansi.GetString($bytes)
+                $encodingUsed = 'Windows-1252 / ANSI (Fallback)'
+            }
+        }
+    }
+
+    if ($null -eq $text) {
+        return [PSCustomObject]@{
+            Lines    = @()
+            Encoding = $encodingUsed
+            IsBinary = $true
         }
     }
 
@@ -118,6 +135,7 @@ function Get-SmartFileLines {
     return [PSCustomObject]@{
         Lines    = $lines
         Encoding = $encodingUsed
+        IsBinary = $false
     }
 }
 
@@ -134,15 +152,22 @@ if ($files.Count -eq 0) {
     return
 }
 
-$snippets    = @{}
-$counter     = 0
-$encodingLog = New-Object System.Collections.Generic.List[object]
+$snippets       = @{}
+$counter        = 0
+$encodingLog    = New-Object System.Collections.Generic.List[object]
+$binarySuspects = New-Object System.Collections.Generic.List[object]
 
 foreach ($file in $files) {
     $relativePath = $file.FullName.Substring($SourceFolder.Length).TrimStart('\', '/')
     $relativePath = $relativePath -replace '\\', '/'
 
     $fileContent = Get-SmartFileLines -Path $file.FullName
+
+    if ($fileContent.IsBinary) {
+        $binarySuspects.Add($relativePath)
+        continue
+    }
+
     $rawLines    = $fileContent.Lines
     if ($null -eq $rawLines) { $rawLines = @() }
     if ($rawLines -isnot [array]) { $rawLines = @($rawLines) }
@@ -193,4 +218,12 @@ if ($fallbackFiles.Count -gt 0) {
     Write-Host "Diese Dateien wurden per ANSI-Fallback gelesen - bitte nach dem Import" -ForegroundColor Yellow
     Write-Host "stichprobenartig auf korrekte Umlaute/Sonderzeichen pruefen:" -ForegroundColor Yellow
     $fallbackFiles | ForEach-Object { Write-Host "  - $($_.Datei)" }
+}
+
+if ($binarySuspects.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Diese Dateien enthalten rohe NUL-Bytes und wurden NICHT exportiert," -ForegroundColor Red
+    Write-Host "da es sich vermutlich nicht um reinen Text handelt (z.B. proprietaere" -ForegroundColor Red
+    Write-Host "Binaer-/Strukturformate). Bitte manuell pruefen, z.B. in einem Hex-Editor:" -ForegroundColor Red
+    $binarySuspects | ForEach-Object { Write-Host "  - $_" }
 }
