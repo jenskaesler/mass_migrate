@@ -7,6 +7,15 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [1.1.3] – 2026-06-18
+
+### 🐛 Behoben
+- 🚨 **Kritischer Bug**: Das Skript selbst enthielt kein UTF-8-BOM. Windows PowerShell 5.1 (`powershell.exe`) liest `.ps1`-Dateien ohne BOM über die System-ANSI-Codepage statt UTF-8 – die enthaltenen Emojis zerfielen dadurch in ungültige Bytefolgen und der Parser brach mit `ParseException` ab ("Die Zeichenfolge hat kein Abschlusszeichen")
+- ✅ UTF-8-BOM ergänzt – das Skript läuft jetzt sowohl unter Windows PowerShell 5.1 als auch PowerShell 7+ zuverlässig
+- 📝 Hinweis in der README ergänzt, damit das BOM bei zukünftigen Bearbeitungen nicht versehentlich wieder entfernt wird
+
+---
+
 ## [1.1.2] – 2026-06-18
 
 ### 🐛 Behoben
