@@ -46,6 +46,13 @@
     Pfad des ZIP-Archivs, das die migrierten Dateien (Ordnerstruktur erhalten)
     sichert, bevor sie aus dem Quellordner geloescht werden.
 
+.PARAMETER IfZipExists
+    Verhalten, falls unter -ZipPath bereits eine Datei existiert:
+    'Ask' (Standard) fragt interaktiv nach (Ueberschreiben/Erweitern/Abbrechen),
+    'Overwrite' ersetzt das bestehende Archiv ohne Rueckfrage,
+    'Extend' fuegt neue Dateien hinzu und aktualisiert vorhandene Eintraege mit
+    gleichem relativem Pfad, der Rest des Archivs bleibt unangetastet.
+
 .PARAMETER Extensions
     Dateiendungen, die beruecksichtigt werden sollen.
 
@@ -61,6 +68,10 @@
     # Fuer automatisierte Laeufe ohne Rueckfrage:
     .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -Confirm:$false
 
+.EXAMPLE
+    # Wiederholter Lauf: bestehendes Backup-ZIP automatisch erweitern statt nachzufragen
+    .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\masscode-import.json" -ZipPath "D:\Scripts_backup.zip" -IfZipExists Extend -Confirm:$false
+
 .LINK
     https://github.com/<dein-user>/MassMigrate
 #>
@@ -75,6 +86,9 @@ param(
 
     [Parameter(Mandatory = $true)]
     [string]$ZipPath,
+
+    [ValidateSet('Ask', 'Overwrite', 'Extend')]
+    [string]$IfZipExists = 'Ask',
 
     [string[]]$Extensions = @(
         '.ps1', '.psm1', '.psd1',
@@ -345,8 +359,55 @@ Write-Host "✅ Tagging abgeschlossen." -ForegroundColor Green
 
 Write-Section -Icon '📦' -Text "Packe ZIP-Archiv: $ZipPath"
 
+$zipMode = [System.IO.Compression.ZipArchiveMode]::Create
+
 if (Test-Path -LiteralPath $ZipPath) {
-    Remove-Item -LiteralPath $ZipPath -Force -WhatIf:$false -Confirm:$false
+    $resolvedAction = $IfZipExists
+
+    if ($resolvedAction -eq 'Ask') {
+        Write-Host "⚠️  Es existiert bereits ein ZIP-Archiv unter diesem Pfad:" -ForegroundColor Yellow
+        Write-Host "   $ZipPath" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   [U] Ueberschreiben - bestehendes Archiv wird ersetzt" -ForegroundColor Cyan
+        Write-Host "   [E] Erweitern      - neue Dateien werden hinzugefuegt, Rest bleibt erhalten" -ForegroundColor Cyan
+        Write-Host "   [A] Abbrechen      - Skript wird beendet, nichts wird veraendert" -ForegroundColor Cyan
+        Write-Host ""
+
+        do {
+            $choice = Read-Host "Was moechtest du tun? (U/E/A)"
+        } while ($choice -notmatch '^[UuEeAa]$')
+
+        $resolvedAction = switch -Regex ($choice) {
+            '^[Uu]$' { 'Overwrite' }
+            '^[Ee]$' { 'Extend' }
+            '^[Aa]$' { 'Abort' }
+        }
+    }
+
+    switch ($resolvedAction) {
+        'Overwrite' {
+            Remove-Item -LiteralPath $ZipPath -Force -WhatIf:$false -Confirm:$false
+            $zipMode = [System.IO.Compression.ZipArchiveMode]::Create
+            Write-Host "🗑️  Bestehendes Archiv wird ersetzt." -ForegroundColor Yellow
+        }
+        'Extend' {
+            $zipMode = [System.IO.Compression.ZipArchiveMode]::Update
+            Write-Host "➕ Bestehendes Archiv wird erweitert." -ForegroundColor Yellow
+        }
+        'Abort' {
+            Write-Host "↩️  Abgebrochen - Tagging wird rueckgaengig gemacht, Quellordner bleibt unveraendert." -ForegroundColor Yellow
+            foreach ($item in $migratedFiles) {
+                if ($item.NewFullName -ne $item.OriginalFullName) {
+                    $originalLeaf = Split-Path -Path $item.OriginalFullName -Leaf
+                    Rename-Item -LiteralPath $item.NewFullName -NewName $originalLeaf -WhatIf:$false -Confirm:$false
+                }
+            }
+            return
+        }
+        default {
+            throw "Unbekannter Wert fuer -IfZipExists: '$resolvedAction'"
+        }
+    }
 }
 
 $zipDir = Split-Path -Path $ZipPath -Parent
@@ -357,11 +418,28 @@ if ($zipDir -and -not (Test-Path -LiteralPath $zipDir)) {
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$zipStream = [System.IO.File]::Open($ZipPath, [System.IO.FileMode]::Create)
+$fileMode = if ($zipMode -eq [System.IO.Compression.ZipArchiveMode]::Update) {
+    [System.IO.FileMode]::Open
+}
+else {
+    [System.IO.FileMode]::Create
+}
+
+$zipStream = [System.IO.File]::Open($ZipPath, $fileMode)
 try {
-    $archive = New-Object System.IO.Compression.ZipArchive($zipStream, [System.IO.Compression.ZipArchiveMode]::Create)
+    $archive = New-Object System.IO.Compression.ZipArchive($zipStream, $zipMode)
     try {
         foreach ($item in $migratedFiles) {
+            if ($zipMode -eq [System.IO.Compression.ZipArchiveMode]::Update) {
+                # Falls beim Erweitern bereits ein Eintrag mit demselben relativen
+                # Pfad existiert (z.B. erneuter Lauf), zuerst entfernen, damit kein
+                # doppelter/veralteter Eintrag im Archiv landet.
+                $existingEntry = $archive.GetEntry($item.NewRelativePath)
+                if ($existingEntry) {
+                    $existingEntry.Delete()
+                }
+            }
+
             $entry       = $archive.CreateEntry($item.NewRelativePath, [System.IO.Compression.CompressionLevel]::Optimal)
             $entryStream = $entry.Open()
             try {
@@ -390,14 +468,18 @@ Write-Host "✅ ZIP erstellt." -ForegroundColor Green
 Write-Section -Icon '✅' -Text 'Verifiziere ZIP-Archiv'
 
 $verifyArchive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-$entryCount    = $verifyArchive.Entries.Count
+$entryNames    = $verifyArchive.Entries | ForEach-Object { $_.FullName }
+$totalEntries  = $verifyArchive.Entries.Count
 $verifyArchive.Dispose()
 
-if ($entryCount -ne $migratedFiles.Count) {
-    throw "ZIP-Verifikation fehlgeschlagen: Erwartet $($migratedFiles.Count) Datei(en), im Archiv gefunden: $entryCount. Abbruch - es wird NICHTS geloescht."
+$missing = $migratedFiles | Where-Object { $entryNames -notcontains $_.NewRelativePath }
+
+if ($missing.Count -gt 0) {
+    $missingList = ($missing | ForEach-Object { $_.NewRelativePath }) -join ', '
+    throw "ZIP-Verifikation fehlgeschlagen: $($missing.Count) migrierte Datei(en) fehlen im Archiv ($missingList). Abbruch - es wird NICHTS geloescht."
 }
 
-Write-Host "✅ $entryCount Datei(en) korrekt im Archiv enthalten." -ForegroundColor Green
+Write-Host "✅ Alle $($migratedFiles.Count) migrierten Datei(en) im Archiv bestaetigt ($totalEntries Eintraege gesamt)." -ForegroundColor Green
 
 #endregion Phase 4
 

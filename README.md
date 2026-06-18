@@ -29,6 +29,7 @@
 - 🧬 **Natives massCode-Importformat**: erzeugt direkt eine "VS Code Snippets JSON", die massCode nativ versteht
 - 🏷️ **Tagging** aller erfolgreich migrierten Dateien im Dateinamen (`_massmigrated`)
 - 📦 **ZIP-Backup** mit exakt erhaltener Ordnerstruktur – nur die migrierten Dateien
+- 🔁 **Schlauer Umgang mit bestehenden Backups**: existiert unter `-ZipPath` bereits ein Archiv, fragt das Skript nach (Überschreiben / Erweitern / Abbrechen) – auch nicht-interaktiv steuerbar über `-IfZipExists`
 - ✅ **ZIP-Verifikation** vor jedem Löschvorgang – im Zweifel passiert lieber gar nichts
 - 🧹 **Aufräumen** des Quellordners (inkl. leer gewordener Unterordner) – alles, was übrig bleibt, muss händisch geprüft werden
 - 🧯 **Natives `-WhatIf` / `-Confirm`**: erst eine echte Vorschau, dann erst löschen
@@ -74,6 +75,9 @@ Der einzige *wirklich* destruktive Schritt ist das Löschen aus dem Quellordner 
 
 # 🤖 Fuer automatisierte Laeufe ohne Rueckfrage
 .\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\import.json" -ZipPath "D:\backup.zip" -Confirm:$false
+
+# 🔁 Wiederholter Lauf: bestehendes Backup-ZIP automatisch erweitern statt nachzufragen
+.\Export-ScriptsToMassCode.ps1 -SourceFolder "D:\Scripts" -OutputFile "D:\import.json" -ZipPath "D:\backup.zip" -IfZipExists Extend -Confirm:$false
 ```
 
 > 💡 **Tipp:** Lass das Skript einmal gegen eine **Kopie** deines Skript-Ordners laufen, bevor du es auf die Originale ansetzt. Die ZIP-Verifikation schützt vor offensichtlichem Datenverlust, ersetzt aber kein Backup.
